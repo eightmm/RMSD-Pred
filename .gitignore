@@ -1,9 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
 # Distribution / packaging
-dist/
+.Python
 build/
-*.egg-info/
-*.egg
+develop-eggs/
+dist/
+downloads/
+eggs/
 .eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # PyInstaller
 *.manifest
@@ -26,6 +47,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+cover/
 
 # Translations
 *.mo
@@ -48,6 +70,7 @@ instance/
 docs/_build/
 
 # PyBuilder
+.pybuilder/
 target/
 
 # Jupyter Notebook
@@ -62,6 +85,13 @@ ipython_config.py
 
 # pipenv
 Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+.pdm-python
 
 # PEP 582
 __pypackages__/
@@ -106,40 +136,24 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
+# IDEs
 .idea/
-
-# VS Code
 .vscode/
+*.swp
+*.swo
+*~
 
-# macOS
+# OS files
 .DS_Store
-
-# Windows
 Thumbs.db
-ehthumbs.db
-Desktop.ini
 
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Model files (too large for git)
-*.pth
-*.ckpt
-*.pt
-
-# Temporary files
-*.tmp
-*.temp
-
-# Results
+# Project specific
+*.tsv
+*.csv
+!example/*.tsv
+!example/*.csv
 results/
 output/
-*.csv
-*.tsv
-*.json
+temp/
+tmp/
+.omc/

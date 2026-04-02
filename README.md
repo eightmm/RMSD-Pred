@@ -1,197 +1,113 @@
-<div align="center">
-
 # RMSD-Pred
 
-</div>
+Protein-ligand binding pose RMSD prediction using Graph Neural Networks.
 
-![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.4.0-red.svg)
-![DGL](https://img.shields.io/badge/DGL-2.4.0-green.svg)
-![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
-
-> **Advanced protein-ligand binding pose RMSD prediction using Graph Neural Networks**
-
-RMSD-Pred is a tool for predicting the Root Mean Square Deviation (RMSD) of protein-ligand binding poses using Graph Neural Networks (GNNs). The model provides both RMSD values and confidence scores for binding pose evaluation.
-
-## Features
-
-- **Accurate RMSD Prediction**: GNN models for precise RMSD estimation
-- **Confidence Scoring**: Probability estimation for pose correctness assessment
-- **Multiple Input Formats**: Support for SDF, MOL2, DLG, PDBQT, and batch processing
-
-## Quick Start
-
-### Installation
+## Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/eightmm/RMSD-Pred.git
 cd RMSD-Pred
-
-# Create and activate conda environment
-conda create -n bindingrmsd python=3.11
-conda activate bindingrmsd
-
-# Install the package
 pip install -e .
-
-# Or install dependencies manually
 pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu121/repo.html
-pip install torch rdkit meeko pandas tqdm
 ```
 
-### Basic Usage
+## Usage
 
-#### Command Line Interface
+### Command Line
 
 ```bash
-# Using the installed command
-bindingrmsd-inference \
+rmsdpred \
     -r example/prot.pdb \
     -l example/ligs.sdf \
     -o results.tsv \
-    --model_path save \
-    --device cuda
-
-# Or using the module directly
-python -m bindingrmsd.inference \
-    -r example/prot.pdb \
-    -l example/ligs.sdf \
-    -o results.tsv \
-    --model_path save \
     --device cuda
 ```
 
-#### Python API
+### Python API
 
 ```python
-from bindingrmsd.inference import inference
+from rmsdpred.inference import inference
 
-# Run inference
+# Uses packaged random_seed0 weights by default
 inference(
     protein_pdb="example/prot.pdb",
-    ligand_file="example/ligs.sdf", 
+    ligand_file="example/ligs.sdf",
     output="results.tsv",
     batch_size=128,
-    model_path="save",
+    device="cuda"
+)
+
+# Or specify custom weights
+inference(
+    protein_pdb="example/prot.pdb",
+    ligand_file="example/ligs.sdf",
+    output="results.tsv",
+    batch_size=128,
+    reg_weight="/path/to/reg.pth",
+    cls_weight="/path/to/cls.pth",
     device="cuda"
 )
 ```
 
-## Usage Guide
+### Parameters
 
-### Input Parameters
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `-r, --protein_pdb` | Receptor protein PDB file | required |
+| `-l, --ligand_file` | Ligand file (.sdf/.mol2/.dlg/.pdbqt/.txt) | required |
+| `-o, --output` | Output TSV file | `result.tsv` |
+| `--reg_weight` | Regression model weight file | packaged `random_reg_seed0.pth` |
+| `--cls_weight` | Classification model weight file | packaged `random_cls_seed0.pth` |
+| `--batch_size` | Batch size | `128` |
+| `--device` | `cuda` or `cpu` | `cuda` |
+| `--ncpu` | Number of CPU workers | `4` |
 
-| Parameter | Description | Default | Required |
-|-----------|-------------|---------|----------|
-| `-r, --protein_pdb` | Receptor protein PDB file | - | Yes |
-| `-l, --ligand_file` | Ligand file or file list | - | Yes |
-| `-o, --output` | Output results file | `result.csv` | No |
-| `--model_path` | Directory with model weights | `./save` | No |
-| `--batch_size` | Batch size for inference | `128` | No |
-| `--device` | Compute device (`cuda`/`cpu`) | `cuda` | No |
-| `--ncpu` | Number of CPU workers | `4` | No |
+### Output
 
-### Supported Input Formats
-
-| Format | Extension | Description |
-|--------|-----------|-------------|
-| SDF | `.sdf` | Structure Data File |
-| MOL2 | `.mol2` | Tripos MOL2 format |
-| DLG | `.dlg` | AutoDock-GPU results |
-| PDBQT | `.pdbqt` | AutoDock Vina results |
-| List | `.txt` | Text file with file paths |
-
-### Output Format
-
-The results are saved as a tab-separated file with the following columns:
+Tab-separated file with columns:
 
 - **Name**: Ligand pose identifier
-- **pRMSD**: Predicted RMSD value (Å)
-- **Is_Above_2A**: Confidence score (0-1, probability of being a good pose, 0 is better)
-- **ADG_Score**: AutoDock score (when available, NaN otherwise, 0 is better)
+- **pRMSD**: Predicted RMSD (Angstrom)
+- **Is_Above_2A**: Confidence score (0-1, probability of RMSD > 2A)
+- **ADG_Score**: AutoDock score (NaN if unavailable)
 
-## Architecture
-
-### Model Components
-
-- **Gated Graph Neural Network**: Advanced GNN architecture for molecular representation
-- **Protein-Ligand Interaction**: Comprehensive modeling of binding interactions
-- **Dual Prediction**: Simultaneous RMSD and confidence prediction
-- **Efficient Processing**: Optimized for batch inference
-
-### File Structure
+## Project Structure
 
 ```
 RMSD-Pred/
-├── bindingrmsd/          # Main package
-│   ├── data/             # Data processing modules
-│   │   ├── data.py          # Dataset classes
-│   │   ├── ligand_atom_feature.py   # Ligand featurization
-│   │   ├── protein_atom_feature.py  # Protein featurization
-│   │   └── utils.py         # Utility functions
-│   ├── model/            # Model architecture
-│   │   ├── GatedGCNLSPE.py  # GNN implementation
-│   │   └── model.py         # Prediction models
-│   └── inference.py         # Inference script
-├── example/              # Example data
-│   ├── prot.pdb            # Example protein
-│   ├── ligs.sdf            # Example ligands
-│   └── run.sh              # Example script
-├── save/                 # Pre-trained models
-│   ├── reg.pth             # RMSD model weights
-│   └── bce.pth             # Confidence model weights
-├── setup.py                # Package configuration
-├── env.yaml                # Conda environment
-└── README.md               # This file
-```
-
-## Example
-
-### Complete Workflow
-
-```bash
-# Navigate to example directory
-cd example
-
-# Run prediction
-bindingrmsd-inference \
-    -r prot.pdb \
-    -l ligs.sdf \
-    -o binding_results.tsv \
-    --batch_size 64 \
-    --device cuda
-
-# View results
-head binding_results.tsv
-```
-
-### Expected Output
-
-```
-Name        pRMSD   Is_Above_2A ADG_Score
-ligand_1    1.23    0.89        -8.5
-ligand_2    3.45    0.12        -6.2
-ligand_3    0.87    0.95        -9.1
-...
+├── src/rmsdpred/
+│   ├── data/
+│   │   ├── data.py
+│   │   ├── ligand_atom_feature.py
+│   │   ├── protein_atom_feature.py
+│   │   └── utils.py
+│   ├── model/
+│   │   ├── GatedGCNLSPE.py
+│   │   └── model.py
+│   ├── weight/
+│   │   └── random/
+│   └── inference.py
+├── example/
+│   ├── prot.pdb
+│   ├── ligs.sdf
+│   └── run.sh
+├── pyproject.toml
+└── README.md
 ```
 
 ## Citation
 
-If you use RMSD-Pred in your research, please cite:
-
 ```bibtex
-@article{rmsdpred2024,
-  title={RMSD-Pred: Accurate Prediction of Protein-Ligand Binding Pose RMSD using Graph Neural Networks},
-  author={Jaemin Sim},
-  year={2024}
+@article{sim2026bapred,
+  title     = {BA-Pred and RMSD-Pred: Integrated Graph Neural Network Models for Accurate Protein--Ligand Binding Affinity and Binding Pose Prediction},
+  author    = {Sim, Jaemin and Lee, Juyong},
+  journal   = {Journal of Chemical Information and Modeling},
+  year      = {2026},
+  doi       = {10.1021/acs.jcim.5c02591},
+  publisher = {American Chemical Society (ACS)}
 }
 ```
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Authors
-
-- **Jaemin Sim** - *Lead Developer* - [eightmm](https://github.com/eightmm)
+Apache License 2.0
