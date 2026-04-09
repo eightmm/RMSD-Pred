@@ -28,8 +28,13 @@ def inference(protein_pdb, ligand_file, output, batch_size, reg_weight=DEFAULT_R
     rmsd_model = PredictionRMSD(57, 256, 13, 25, 20, 4, 0).to(device)
     prob_model = PredictionRMSD(57, 256, 13, 25, 20, 4, 0).to(device)
 
-    rmsd_model.load_state_dict(torch.load(reg_weight, weights_only=True)['model_state_dict'])
-    prob_model.load_state_dict(torch.load(cls_weight, weights_only=True)['model_state_dict'])
+    def _load_state_dict(ckpt_path, model):
+        sd = torch.load(ckpt_path, weights_only=False, map_location=device)['model_state_dict']
+        sd = {k.removeprefix('base_model.'): v for k, v in sd.items()}
+        model.load_state_dict(sd)
+
+    _load_state_dict(reg_weight, rmsd_model)
+    _load_state_dict(cls_weight, prob_model)
 
     rmsd_model.eval()
     prob_model.eval()
