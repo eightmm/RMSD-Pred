@@ -1,4 +1,4 @@
-import torch, dgl  # type: ignore
+import torch  # type: ignore
 
 from rdkit import Chem  # type: ignore
 
@@ -105,18 +105,33 @@ def get_indices(mol, smarts):
 
 
 def get_bond_feature(mol):
-    adj = torch.tensor(Chem.GetAdjacencyMatrix(mol))
+    """Build bond graph directly in sparse form (edge_index, edge_attr).
+
+    Returns both edge directions per bond (symmetric adjacency). The rotatable-bond
+    flag replicates the original `torch.tensor([a,b]) in rotate` torch __contains__
+    broadcast semantics exactly: rf=1 iff (a in rotate[:,0]) OR (b in rotate[:,1]).
+    """
     rotate = get_indices(mol, "[!$(*#*)&!D1]-!@[!$(*#*)&!D1]")
+    if len(rotate) != 0:
+        rot_col0 = set(rotate[:, 0].tolist())
+        rot_col1 = set(rotate[:, 1].tolist())
+    else:
+        rot_col0, rot_col1 = set(), set()
 
-    index = torch.where(adj != 0)
-    adj = adj.unsqueeze(2)
-    adj = torch.where(adj > 0, torch.zeros(13), torch.zeros(13))
-    for i, j in zip(index[0], index[1]):
-        bf = bond_feature(mol.GetBondBetweenAtoms(int(i), int(j)))
-        rf = [1 if len(rotate) != 0 and torch.tensor([i, j]) in rotate else 0]
-        adj[i, j] = torch.tensor(bf + rf)
+    src, dst, feats = [], [], []
+    for bond in mol.GetBonds():
+        i = bond.GetBeginAtomIdx()
+        j = bond.GetEndAtomIdx()
+        bf = bond_feature(bond)
+        for a, b in ((i, j), (j, i)):
+            rf = [1 if (a in rot_col0 or b in rot_col1) else 0]
+            src.append(a)
+            dst.append(b)
+            feats.append(bf + rf)
 
-    return adj.float()
+    edge_index = torch.tensor([src, dst], dtype=torch.long)
+    edge_attr = torch.tensor(feats, dtype=torch.float) if feats else torch.zeros((0, 13)).float()
+    return edge_index, edge_attr
 
 
 def get_distance_feature(distance):
@@ -176,22 +191,3 @@ def get_interact_feature(pmol, lmol, protein_node_idx, ligand_node_idx):
     return interact_adj
 
 
-def mol_to_graph(mol):
-    n = mol.GetNumAtoms()
-    coord = get_mol_coordinate(mol)
-    h = get_atom_feature(mol)
-    adj = get_bond_feature(mol).to_sparse(sparse_dim=2)
-
-    u = adj.indices()[0]
-    v = adj.indices()[1]
-    e = adj.values()
-
-    g = dgl.DGLGraph()
-    g.add_nodes(n)
-    g.add_edges(u, v)
-
-    g.ndata['feat'] = h
-    g.ndata['coord'] = coord
-    g.edata['feat'] = e
-
-    return g

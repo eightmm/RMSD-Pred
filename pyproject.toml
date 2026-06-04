@@ -13,8 +13,7 @@ authors = [
   { name = "Jaemin Sim" }
 ]
 dependencies = [
-  "torch>=2.4.0,<2.5",
-  "dgl>=2.4.0",
+  "torch>=2.7.0",
   "pydantic>=2.0.0",
   "pandas>=2.0.0",
   "tqdm>=4.60.0",
@@ -26,6 +25,7 @@ dependencies = [
   "meeko>=0.5.0",
   "gemmi",
   "packaging",
+  "torch-geometric>=2.7.0",
 ]
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
@@ -50,7 +50,10 @@ rmsdpred = [
   "weight/random/*.pth",
 ]
 
-[tool.uv]
-find-links = [
-  "https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html",
-]
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }

@@ -1,7 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import dgl.function as fn
+
+from torch_geometric.utils import scatter
+
+"""GatedGCNLSPE: GatedGCN with LSPE (PyG port).
+
+Edge convention: edge_index[0] = src (u), edge_index[1] = dst (v).
+Messages aggregate at dst (v), matching the original DGL update_all semantics.
+Param names identical to the DGL version -> state_dict loads 1:1.
+"""
 
 
 class GatedGCNLSPELayer(nn.Module):
@@ -28,73 +36,59 @@ class GatedGCNLSPELayer(nn.Module):
         self.bn_node_h = nn.BatchNorm1d(output_dim)
         self.bn_node_e = nn.BatchNorm1d(output_dim)
 
-    def message_func_for_vij(self, edges):
-        hj = edges.src['h']
-        pj = edges.src['p']
-        vij = self.A2(torch.cat((hj, pj), -1))
-        return {'v_ij': vij}
+    def forward(self, edge_index, h, p, e):
+        h_in = h
+        p_in = p
+        e_in = e
 
-    def message_func_for_pj(self, edges):
-        pj = edges.src['p']
-        return {'C2_pj': self.C2(pj)}
+        src = edge_index[0]  # u
+        dst = edge_index[1]  # v
+        N = h.size(0)
 
-    def compute_normalized_eta(self, edges):
-        return {'eta_ij': edges.data['sigma_hat_eta'] / (edges.dst['sum_sigma_hat_eta'] + 1e-6)}
+        A1_h = self.A1(torch.cat((h, p), -1))
+        B1_h = self.B1(h)
+        B2_h = self.B2(h)
+        C1_p = self.C1(p)
+        B3_e = self.B3(e)
 
-    def forward(self, g, h, p, e):
-        with g.local_scope():
-            h_in = h
-            p_in = p
-            e_in = e
+        # fn.u_add_v('B1_h', 'B2_h'): src B1 + dst B2
+        B1_B2_h = B1_h[src] + B2_h[dst]
+        hat_eta = B1_B2_h + B3_e
+        sigma_hat_eta = torch.sigmoid(hat_eta)
 
-            g.ndata['h'] = h
-            g.ndata['A1_h'] = self.A1(torch.cat((h, p), -1))
-            g.ndata['B1_h'] = self.B1(h)
-            g.ndata['B2_h'] = self.B2(h)
+        sum_sigma_hat_eta = scatter(sigma_hat_eta, dst, dim=0, dim_size=N, reduce='sum')
+        eta_ij = sigma_hat_eta / (sum_sigma_hat_eta[dst] + 1e-6)
 
-            g.ndata['p'] = p
-            g.ndata['C1_p'] = self.C1(p)
+        v_ij = self.A2(torch.cat((h[src], p[src]), -1))
+        eta_mul_v = eta_ij * v_ij
+        sum_eta_v = scatter(eta_mul_v, dst, dim=0, dim_size=N, reduce='sum')
+        h = A1_h + sum_eta_v
 
-            g.edata['e'] = e
-            g.edata['B3_e'] = self.B3(e)
+        C2_pj = self.C2(p[src])
+        eta_mul_p = eta_ij * C2_pj
+        sum_eta_p = scatter(eta_mul_p, dst, dim=0, dim_size=N, reduce='sum')
+        p = C1_p + sum_eta_p
 
-            g.apply_edges(fn.u_add_v('B1_h', 'B2_h', 'B1_B2_h'))
-            g.edata['hat_eta'] = g.edata['B1_B2_h'] + g.edata['B3_e']
-            g.edata['sigma_hat_eta'] = torch.sigmoid(g.edata['hat_eta'])
-            g.update_all(fn.copy_e('sigma_hat_eta', 'm'), fn.sum('m', 'sum_sigma_hat_eta'))
-            g.apply_edges(self.compute_normalized_eta)
-            g.apply_edges(self.message_func_for_vij)
-            g.edata['eta_mul_v'] = g.edata['eta_ij'] * g.edata['v_ij']
-            g.update_all(fn.copy_e('eta_mul_v', 'm'), fn.sum('m', 'sum_eta_v'))
-            g.ndata['h'] = g.ndata['A1_h'] + g.ndata['sum_eta_v']
+        e = hat_eta
 
-            g.apply_edges(self.message_func_for_pj)
-            g.edata['eta_mul_p'] = g.edata['eta_ij'] * g.edata['C2_pj']
-            g.update_all(fn.copy_e('eta_mul_p', 'm'), fn.sum('m', 'sum_eta_p'))
-            g.ndata['p'] = g.ndata['C1_p'] + g.ndata['sum_eta_p']
+        if self.batch_norm:
+            h = self.bn_node_h(h)
+            e = self.bn_node_e(e)
 
-            h = g.ndata['h']
-            p = g.ndata['p']
-            e = g.edata['hat_eta']
+        h = F.relu(h)
+        e = F.relu(e)
+        p = torch.tanh(p)
 
-            if self.batch_norm:
-                h = self.bn_node_h(h)
-                e = self.bn_node_e(e)
+        if self.residual:
+            h = h_in + h
+            p = p_in + p
+            e = e_in + e
 
-            h = F.relu(h)
-            e = F.relu(e)
-            p = torch.tanh(p)
+        h = F.dropout(h, self.dropout, training=self.training)
+        p = F.dropout(p, self.dropout, training=self.training)
+        e = F.dropout(e, self.dropout, training=self.training)
 
-            if self.residual:
-                h = h_in + h
-                p = p_in + p
-                e = e_in + e
-
-            h = F.dropout(h, self.dropout, training=self.training)
-            p = F.dropout(p, self.dropout, training=self.training)
-            e = F.dropout(e, self.dropout, training=self.training)
-
-            return h, p, e
+        return h, p, e
 
     def __repr__(self):
         return '{}(in_channels={}, out_channels={})'.format(
