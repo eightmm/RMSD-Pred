@@ -7,9 +7,12 @@ Protein-ligand binding pose RMSD prediction using Graph Neural Networks.
 ```bash
 git clone https://github.com/eightmm/RMSD-Pred.git
 cd RMSD-Pred
-pip install -e .
-pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu121/repo.html
+uv sync   # installs PyTorch (CUDA 12.8) + PyTorch Geometric
 ```
+
+> **GPU (incl. NVIDIA Blackwell / sm_120):** `uv sync` uses the bundled CUDA 12.8
+> index. With pip: `pip install -e .` then
+> `pip install torch --index-url https://download.pytorch.org/whl/cu128`
 
 ## Usage
 
