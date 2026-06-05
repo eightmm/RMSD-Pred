@@ -7,6 +7,8 @@ updates:
     groups:
       python-deps:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "setuptools"  # build-only, not tracked in uv.lock
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
