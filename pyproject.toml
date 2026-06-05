@@ -63,4 +63,8 @@ torch = { index = "pytorch-cu128" }
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "ruff>=0.15.16",
 ]
+
+[tool.ruff]
+line-length = 120

@@ -95,8 +95,10 @@ class PredictionRMSD(nn.Module):
         for gp_size, gl_size in zip(gp_sizes, gl_sizes):
             to_complex.extend(range(gp_off, gp_off + gp_size))
             to_complex.extend(range(Np + gl_off, Np + gl_off + gl_size))
-            hp_from_c.extend(range(cpos, cpos + gp_size)); cpos += gp_size
-            hl_from_c.extend(range(cpos, cpos + gl_size)); cpos += gl_size
+            hp_from_c.extend(range(cpos, cpos + gp_size))
+            cpos += gp_size
+            hl_from_c.extend(range(cpos, cpos + gl_size))
+            cpos += gl_size
             gp_off += gp_size
             gl_off += gl_size
         to_complex = torch.tensor(to_complex, dtype=torch.long, device=device)

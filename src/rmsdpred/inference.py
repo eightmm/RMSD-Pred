@@ -20,19 +20,18 @@ def inference(protein_pdb, ligand_file, output, batch_size, reg_weight=DEFAULT_R
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, pin_memory=True, collate_fn=collate_pyg,
                         num_workers=num_workers, persistent_workers=(num_workers > 0))
 
-    rmsd_model = PredictionRMSD(57, 256, 13, 25, 20, 4, 0).to(device)
-    prob_model = PredictionRMSD(57, 256, 13, 25, 20, 4, 0).to(device)
-
-    def _load_state_dict(ckpt_path, model):
+    def _load(ckpt_path):
+        model = PredictionRMSD(57, 256, 13, 25, 20, 4, 0).to(device)
         sd = torch.load(ckpt_path, weights_only=False, map_location=device)['model_state_dict']
         sd = {k.removeprefix('base_model.'): v for k, v in sd.items()}
         model.load_state_dict(sd)
+        model.train(False)
+        return model
 
-    _load_state_dict(reg_weight, rmsd_model)
-    _load_state_dict(cls_weight, prob_model)
-
-    rmsd_model.train(False)
-    prob_model.train(False)
+    reg_weights = [reg_weight] if isinstance(reg_weight, str) else list(reg_weight)
+    cls_weights = [cls_weight] if isinstance(cls_weight, str) else list(cls_weight)
+    rmsd_models = [_load(w) for w in reg_weights]
+    prob_models = [_load(w) for w in cls_weights]
 
     results = {"Name": [], "pRMSD": [], "Is_Above_2A": [], "ADG_Score": []}
 
@@ -43,10 +42,9 @@ def inference(protein_pdb, ligand_file, output, batch_size, reg_weight=DEFAULT_R
             bgp, bgl, bgc, error, names, adg_score = data
             bgp, bgl, bgc = bgp.to(device), bgl.to(device), bgc.to(device)
 
-            rmsd = rmsd_model(bgp, bgl, bgc).view(-1)
-            prob = prob_model(bgp, bgl, bgc).view(-1)
-
-            prob = torch.sigmoid(prob)
+            # ensemble: mean RMSD, mean probability across weights (single -> unchanged)
+            rmsd = torch.stack([m(bgp, bgl, bgc).view(-1) for m in rmsd_models], dim=0).mean(dim=0)
+            prob = torch.stack([torch.sigmoid(m(bgp, bgl, bgc).view(-1)) for m in prob_models], dim=0).mean(dim=0)
 
             rmsd[error == 1] = torch.tensor(float('nan'))
             prob[error == 1] = torch.tensor(float('nan'))
@@ -76,12 +74,19 @@ def main():
     parser.add_argument('--ncpu', default=4, type=int, help="Number of CPU workers (default: 4)")
     parser.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda'],
                         help='Compute device: cpu or cuda (default: cuda)')
-    parser.add_argument('--reg_weight', type=str, default=DEFAULT_REG_WEIGHT,
-                        help='Regression model weight file (default: packaged random_reg_seed0)')
-    parser.add_argument('--cls_weight', type=str, default=DEFAULT_CLS_WEIGHT,
-                        help='Classification model weight file (default: packaged random_cls_seed0)')
+    parser.add_argument('--reg_weight', type=str, nargs='+', default=[DEFAULT_REG_WEIGHT],
+                        help='Regression weight file(s); multiple are ensembled by mean (default: random_reg_seed0)')
+    parser.add_argument('--cls_weight', type=str, nargs='+', default=[DEFAULT_CLS_WEIGHT],
+                        help='Classification weight file(s); multiple are ensembled by mean (default: random_cls_seed0)')
 
     args = parser.parse_args()
+
+    assert os.path.isfile(args.protein_pdb), f"Protein PDB not found: {args.protein_pdb}"
+    assert os.path.isfile(args.ligand_file), f"Ligand file not found: {args.ligand_file}"
+    for w in args.reg_weight:
+        assert os.path.isfile(w), f"Regression weight not found: {w}"
+    for w in args.cls_weight:
+        assert os.path.isfile(w), f"Classification weight not found: {w}"
 
     os.environ["OMP_NUM_THREADS"] = str(args.ncpu)
     os.environ["MKL_NUM_THREADS"] = str(args.ncpu)
