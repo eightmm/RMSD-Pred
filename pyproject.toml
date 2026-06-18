@@ -16,7 +16,7 @@ dependencies = [
   "torch>=2.7.0",
   "pydantic>=2.0.0",
   "pandas>=2.0.0",
-  "tqdm>=4.68.2",
+  "tqdm>=4.68.3",
   "rdkit>=2026.3.3",
   "numpy>=1.21.0",
   "scipy>=1.7.0",
@@ -62,8 +62,8 @@ torch = { index = "pytorch-cu128" }
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
-    "ruff>=0.15.16",
+    "pytest>=9.1.0",
+    "ruff>=0.15.17",
 ]
 
 [tool.ruff]
